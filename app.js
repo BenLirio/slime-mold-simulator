@@ -261,6 +261,11 @@
     setupAgents();
     hasInteracted = false;
     document.getElementById('pre-interaction').classList.remove('hidden');
+    // Clear scenario state so the UI reflects a blank slate.
+    activeScenario = null;
+    document.querySelectorAll('.btn-scenario').forEach(b => b.classList.remove('active'));
+    const narration = document.getElementById('scenario-narration');
+    if (narration) narration.classList.add('narration-hidden');
   }
 
   // ─── UI ───────────────────────────────────────────────────────────────────
@@ -310,6 +315,229 @@
     // Edit-mode toggle — controls whether the canvas captures touch events
     // (so mobile users can scroll the page past the canvas).
     setupEditToggle();
+
+    // Scenario presets + guided lessons
+    setupScenarios();
+  }
+
+  // ─── Scenarios ────────────────────────────────────────────────────────────
+  // Each scenario can: pre-place food (normalized coords 0..1),
+  // set agent count and decay, and start a narration sequence.
+  const SCENARIOS = {
+    tokyo: {
+      label: 'The Tokyo Experiment',
+      agents: 30000,
+      decay: 3,
+      // Normalized approximations of 12 major Tokyo loop stations.
+      // We don't need geographic precision — we want a recognizable ring
+      // with a central hub so the slime's solution visibly echoes the
+      // Yamanote line.
+      food: [
+        [0.50, 0.18], // Ikebukuro (north)
+        [0.62, 0.22],
+        [0.72, 0.30], // Ueno
+        [0.78, 0.44],
+        [0.80, 0.58], // Tokyo Station
+        [0.74, 0.70],
+        [0.60, 0.78], // Shinagawa (south)
+        [0.44, 0.78],
+        [0.30, 0.70], // Shibuya
+        [0.22, 0.56], // Shinjuku
+        [0.28, 0.40],
+        [0.40, 0.26],
+        [0.50, 0.50], // central hub — Tokyo city core
+      ],
+      narration: [
+        {
+          title: 'Tokyo · Step 1',
+          body: '36 oat flakes. 12 of them shown here, placed at major rail stations around Tokyo. The slime mold starts from the center. What network will it grow?'
+        },
+        {
+          title: 'Tokyo · Step 2',
+          body: 'Food emits a chemical trail. Agents everywhere sense it, drift toward it, and leave their own pheromone behind — reinforcing paths that got there first.'
+        },
+        {
+          title: 'Tokyo · Step 3',
+          body: 'Watch the tendrils thin out. Weak branches fade, strong ones thicken. The emerging network is startlingly close to Tokyo\'s actual Yamanote loop + radial lines — engineered by a cell with no brain.'
+        },
+        {
+          title: 'Tokyo · Done',
+          body: 'Human engineers took ~100 years to plan this. The slime got there in a day. Now try moving or adding "stations" yourself — switch to Edit mode and tap the canvas.'
+        },
+      ],
+    },
+    lesson1: {
+      label: 'Lesson 1 · Sense',
+      agents: 800,      // few enough that you can almost see individuals
+      decay: 5,         // fast fade so trails don't dominate
+      food: [[0.75, 0.50]],
+      narration: [
+        {
+          title: 'Sense · 1 of 3',
+          body: 'One food source, on the right. The organism doesn\'t see it. No eyes. No brain. It only knows the concentration of a chemical in the space right in front of it.'
+        },
+        {
+          title: 'Sense · 2 of 3',
+          body: 'Each agent has three "nostrils" — left, center, right. Every frame, it samples the trail intensity at each one.'
+        },
+        {
+          title: 'Sense · 3 of 3',
+          body: 'That\'s the whole input. Three numbers. From that, it must decide which way to turn. Ready for the steering rule?'
+        },
+      ],
+    },
+    lesson2: {
+      label: 'Lesson 2 · Steer',
+      agents: 3000,
+      decay: 4,
+      food: [[0.25, 0.30], [0.75, 0.70]],
+      narration: [
+        {
+          title: 'Steer · 1 of 3',
+          body: 'Two food sources now. The steering rule is brutally simple: "turn toward the strongest smell."'
+        },
+        {
+          title: 'Steer · 2 of 3',
+          body: 'If center > left and right: keep going. If left > right: turn left a bit. If right > left: turn right a bit. That\'s it. No memory. No planning.'
+        },
+        {
+          title: 'Steer · 3 of 3',
+          body: 'But each agent also *leaves its own trail*. Now other agents will smell that trail too. This is the feedback loop that builds the network.'
+        },
+      ],
+    },
+    lesson3: {
+      label: 'Lesson 3 · Swarm',
+      agents: 40000,
+      decay: 3,
+      food: [
+        [0.30, 0.30], [0.70, 0.30], [0.30, 0.70], [0.70, 0.70], [0.50, 0.50],
+      ],
+      narration: [
+        {
+          title: 'Swarm · 1 of 3',
+          body: 'Five food sources. 40,000 agents, each running that same 3-sensor rule. No leader, no coordination, no message-passing.'
+        },
+        {
+          title: 'Swarm · 2 of 3',
+          body: 'Trails that connect food get reinforced by many agents. Trails that wander off decay. Over a few thousand frames, the strong paths win.'
+        },
+        {
+          title: 'Swarm · 3 of 3',
+          body: 'What you\'re watching is an optimization algorithm that nature invented before nervous systems. Biologists call it "self-organization." Computer scientists call it a Physarum solver — and use it for real network design.'
+        },
+      ],
+    },
+    sandbox: {
+      label: 'Sandbox',
+      agents: 20000,
+      decay: 3,
+      food: [],
+      narration: null, // no narration — free play
+    },
+  };
+
+  let activeScenario = null;
+  let narrationStep = 0;
+
+  function setupScenarios() {
+    const buttons = document.querySelectorAll('.btn-scenario');
+    buttons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const key = btn.dataset.scenario;
+        activateScenario(key);
+      });
+    });
+
+    document.getElementById('narration-close').addEventListener('click', hideNarration);
+    document.getElementById('narration-next').addEventListener('click', advanceNarration);
+  }
+
+  function activateScenario(key) {
+    const s = SCENARIOS[key];
+    if (!s) return;
+    activeScenario = key;
+
+    // Mark active button
+    document.querySelectorAll('.btn-scenario').forEach(b => {
+      b.classList.toggle('active', b.dataset.scenario === key);
+    });
+
+    // Apply agent count via the slider (keeps UI in sync).
+    const agentSlider = document.getElementById('agent-count');
+    const agentDisplay = document.getElementById('agent-count-display');
+    // Clamp to slider's allowed range.
+    const agentsClamped = Math.max(
+      parseInt(agentSlider.min, 10),
+      Math.min(parseInt(agentSlider.max, 10), s.agents)
+    );
+    agentSlider.value = agentsClamped;
+    numAgents = agentsClamped;
+    agentDisplay.textContent = (numAgents / 1000).toFixed(0) + 'k';
+
+    // Decay
+    const decaySlider = document.getElementById('decay-rate');
+    const decayDisplay = document.getElementById('decay-display');
+    const decayLabels = ['glacial', 'slow', 'medium', 'fast', 'brisk', 'frantic'];
+    decaySlider.value = s.decay;
+    decayRate = s.decay;
+    decayDisplay.textContent = decayLabels[decayRate - 1];
+
+    // Reset sim state
+    foodSources = [];
+    trailMap = new Float32Array(W * H);
+    setupAgents();
+
+    // Place food (convert normalized → canvas coords)
+    for (const [nx, ny] of s.food) {
+      foodSources.push({ x: nx * W, y: ny * H });
+    }
+
+    // Pre-interaction hint: hide it for any non-sandbox scenario
+    // (the scenario itself is now providing interaction).
+    const pre = document.getElementById('pre-interaction');
+    if (s.food.length > 0 || s.narration) {
+      pre.classList.add('hidden');
+      hasInteracted = true;
+    } else {
+      pre.classList.remove('hidden');
+      hasInteracted = false;
+    }
+
+    // Narration
+    if (s.narration && s.narration.length > 0) {
+      narrationStep = 0;
+      showNarration(s.narration[0], 1, s.narration.length);
+    } else {
+      hideNarration();
+    }
+  }
+
+  function showNarration(entry, stepNum, total) {
+    const box = document.getElementById('scenario-narration');
+    box.classList.remove('narration-hidden');
+    document.getElementById('narration-title').textContent = entry.title;
+    document.getElementById('narration-body').textContent = entry.body;
+    document.getElementById('narration-step-indicator').textContent =
+      'Step ' + stepNum + ' / ' + total;
+    const nextBtn = document.getElementById('narration-next');
+    nextBtn.textContent = (stepNum >= total) ? 'Got it' : 'Next →';
+  }
+
+  function hideNarration() {
+    document.getElementById('scenario-narration').classList.add('narration-hidden');
+  }
+
+  function advanceNarration() {
+    if (!activeScenario) return;
+    const s = SCENARIOS[activeScenario];
+    if (!s || !s.narration) return;
+    narrationStep++;
+    if (narrationStep >= s.narration.length) {
+      hideNarration();
+      return;
+    }
+    showNarration(s.narration[narrationStep], narrationStep + 1, s.narration.length);
   }
 
   function setupCanvasInteraction() {

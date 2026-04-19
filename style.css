@@ -205,6 +205,150 @@ header h1 {
   letter-spacing: 0.03em;
 }
 
+/* Scenarios */
+#scenarios {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+}
+
+.section-title {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--amber);
+  font-weight: 700;
+}
+
+.section-hint {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  font-style: italic;
+  line-height: 1.55;
+  margin-bottom: 2px;
+}
+
+#scenario-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.btn-scenario {
+  font-family: var(--font);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  padding: 10px 14px;
+  min-height: 52px;
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--amber-dim);
+  border-radius: 2px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.btn-scenario:hover,
+.btn-scenario.active {
+  background: rgba(232, 160, 32, 0.08);
+  border-left-color: var(--amber);
+}
+
+.btn-scenario .scenario-title {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--amber);
+  letter-spacing: 0.04em;
+}
+
+.btn-scenario .scenario-sub {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-style: italic;
+  line-height: 1.4;
+}
+
+#scenario-narration {
+  margin-top: 6px;
+  padding: 12px 14px;
+  background: #06080a;
+  border: 1px solid var(--amber-dim);
+  border-left: 3px solid var(--amber);
+  border-radius: 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+#scenario-narration.narration-hidden {
+  display: none;
+}
+
+.narration-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+#narration-title {
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--amber);
+  font-weight: 700;
+}
+
+#narration-close {
+  background: transparent;
+  color: var(--text-muted);
+  border: none;
+  font-size: 1.2rem;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0 4px;
+}
+
+#narration-close:hover {
+  color: var(--amber);
+}
+
+#narration-body {
+  font-size: 0.84rem;
+  color: var(--text);
+  line-height: 1.65;
+}
+
+#narration-progress {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+#narration-step-indicator {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.btn-narration-next {
+  flex: unset;
+  min-width: 90px;
+  padding: 8px 14px;
+  min-height: 36px;
+  font-size: 0.76rem;
+}
+
 /* Controls */
 #controls {
   display: flex;
@@ -330,6 +474,19 @@ header h1 {
 #info em {
   color: var(--amber);
   font-style: normal;
+}
+
+#info .info-credit {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
+  font-style: normal;
+  color: var(--text-muted);
+  font-size: 0.76rem;
+}
+
+#info .info-credit em {
+  font-style: italic;
 }
 
 /* Food marker dots rendered on canvas, but we add a small status bar */
