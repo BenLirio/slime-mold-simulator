@@ -23,12 +23,21 @@
       <p class="subtitle">A living network that finds the shortest path — without a brain.</p>
     </header>
 
-    <div id="canvas-wrapper">
+    <div id="canvas-wrapper" class="edit-on">
       <canvas id="sim-canvas"></canvas>
+      <div id="edit-badge" aria-hidden="true">EDIT MODE: ON · tap to place food</div>
       <div id="pre-interaction">
         <span class="hint-icon">☞</span>
         <p>Tap the canvas to place food.<br>The organism will find it.</p>
       </div>
+    </div>
+
+    <div id="edit-toggle-row">
+      <button id="edit-toggle" class="btn-edit" aria-pressed="true">
+        <span class="edit-dot"></span>
+        <span id="edit-toggle-label">Edit mode: ON</span>
+      </button>
+      <p class="edit-hint">Turn off to scroll the page on mobile without placing food.</p>
     </div>
 
     <div id="controls">

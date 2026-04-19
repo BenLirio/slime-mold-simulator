@@ -70,14 +70,51 @@ header h1 {
   border: 1px solid var(--border);
   border-radius: 3px;
   overflow: hidden;
+}
+
+#canvas-wrapper.edit-on {
   cursor: crosshair;
+}
+
+#canvas-wrapper:not(.edit-on) {
+  cursor: default;
 }
 
 #sim-canvas {
   display: block;
   width: 100%;
   height: auto;
+  /* Default: allow vertical page scroll when starting a touch on the canvas. */
+  touch-action: pan-y;
+}
+
+#canvas-wrapper.edit-on #sim-canvas {
+  /* Capture all gestures so drawing food doesn't fight the scroll. */
   touch-action: none;
+}
+
+/* Small floating badge that makes edit-mode state obvious */
+#edit-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  font-size: 0.66rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--bg);
+  background: var(--amber);
+  padding: 4px 8px;
+  border-radius: 2px;
+  pointer-events: none;
+  box-shadow: 0 0 10px rgba(232, 160, 32, 0.4);
+  opacity: 0.9;
+}
+
+#canvas-wrapper:not(.edit-on) #edit-badge {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  box-shadow: none;
 }
 
 #pre-interaction {
@@ -112,6 +149,60 @@ header h1 {
 @keyframes pulse-hint {
   0%, 100% { opacity: 0.4; }
   50% { opacity: 1; }
+}
+
+/* Edit-mode toggle row */
+#edit-toggle-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: stretch;
+}
+
+.btn-edit {
+  font-family: var(--font);
+  font-size: 0.82rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 12px 16px;
+  min-height: 48px;
+  border-radius: 2px;
+  cursor: pointer;
+  background: var(--amber-dim);
+  color: var(--amber);
+  border: 1px solid var(--amber);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.btn-edit[aria-pressed="false"] {
+  background: transparent;
+  color: var(--text-muted);
+  border-color: var(--border);
+}
+
+.btn-edit .edit-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--amber);
+  box-shadow: 0 0 8px rgba(232, 160, 32, 0.7);
+}
+
+.btn-edit[aria-pressed="false"] .edit-dot {
+  background: var(--text-muted);
+  box-shadow: none;
+}
+
+.edit-hint {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-style: italic;
+  text-align: center;
+  letter-spacing: 0.03em;
 }
 
 /* Controls */

@@ -19,7 +19,8 @@
 
   // ─── State ────────────────────────────────────────────────────────────────
   let canvas, ctx, W, H;
-  let trailMap;        // Float32Array, W×H
+  let offscreen, offCtx;     // CSS-pixel-sized buffer we render the sim into
+  let trailMap;              // Float32Array, W×H (CSS pixels)
   let agentX, agentY, agentAngle;  // Float32Arrays
   let numAgents = 20000;
   let decayRate = 3;   // 1–6 → mapped to actual value
@@ -28,6 +29,8 @@
   let hasInteracted = false;
   let frameCount = 0;
   let rafId;
+  let editMode = true;       // when false, canvas ignores pointer/touch input
+                             // and lets the page scroll past it.
 
   // ─── Init ─────────────────────────────────────────────────────────────────
   function init() {
@@ -45,18 +48,30 @@
   function resizeCanvas() {
     const wrapper = document.getElementById('canvas-wrapper');
     const dpr     = Math.min(window.devicePixelRatio || 1, 2);
-    const cssW    = wrapper.clientWidth;
+    const cssW    = Math.max(1, wrapper.clientWidth);
     // Aspect: keep square-ish on mobile, wider on desktop
-    const cssH    = Math.min(cssW, Math.round(window.innerHeight * 0.55));
+    const cssH    = Math.max(1, Math.min(cssW, Math.round(window.innerHeight * 0.55)));
 
+    // Backing buffer matches the on-screen size so the sim fills the box exactly.
     canvas.width  = Math.round(cssW * dpr);
     canvas.height = Math.round(cssH * dpr);
     canvas.style.width  = cssW + 'px';
     canvas.style.height = cssH + 'px';
 
-    ctx.scale(dpr, dpr);
+    // We do NOT scale the main ctx here. We render the sim into an
+    // offscreen buffer at simulation resolution (W×H), then drawImage it
+    // stretched across the whole device-pixel canvas. This makes the visible
+    // image exactly fill the canvas regardless of DPR — fixing the bug where
+    // the sim only covered a fraction of the box and touches felt offset.
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+
     W = cssW;
     H = cssH;
+
+    offscreen = document.createElement('canvas');
+    offscreen.width  = W;
+    offscreen.height = H;
+    offCtx = offscreen.getContext('2d');
 
     trailMap = new Float32Array(W * H);
   }
@@ -168,8 +183,8 @@
 
   // ─── Render ───────────────────────────────────────────────────────────────
   function render() {
-    // Build ImageData from trailMap
-    const imageData = ctx.createImageData(W, H);
+    // Build ImageData from trailMap into the OFFSCREEN buffer (W×H CSS pixels)
+    const imageData = offCtx.createImageData(W, H);
     const data = imageData.data;
 
     for (let i = 0; i < trailMap.length; i++) {
@@ -194,29 +209,36 @@
       }
     }
 
-    ctx.putImageData(imageData, 0, 0);
+    offCtx.putImageData(imageData, 0, 0);
 
-    // Draw food sources
+    // Draw food sources into the offscreen buffer (in CSS-pixel coords,
+    // matching the input coordinate space).
     for (const f of foodSources) {
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(f.x, f.y, 7, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(255, 230, 80, 0.9)';
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(255, 200, 20, 0.5)';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-      ctx.restore();
+      offCtx.save();
+      offCtx.beginPath();
+      offCtx.arc(f.x, f.y, 7, 0, Math.PI * 2);
+      offCtx.fillStyle = 'rgba(255, 230, 80, 0.9)';
+      offCtx.fill();
+      offCtx.strokeStyle = 'rgba(255, 200, 20, 0.5)';
+      offCtx.lineWidth = 2;
+      offCtx.stroke();
+      offCtx.restore();
 
       // Outer glow ring
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(f.x, f.y, 14, 0, Math.PI * 2);
-      ctx.strokeStyle = 'rgba(232, 160, 32, 0.25)';
-      ctx.lineWidth = 3;
-      ctx.stroke();
-      ctx.restore();
+      offCtx.save();
+      offCtx.beginPath();
+      offCtx.arc(f.x, f.y, 14, 0, Math.PI * 2);
+      offCtx.strokeStyle = 'rgba(232, 160, 32, 0.25)';
+      offCtx.lineWidth = 3;
+      offCtx.stroke();
+      offCtx.restore();
     }
+
+    // Stretch the offscreen buffer over the entire visible canvas. Because
+    // both source and dest fill their full extents, what the user sees lines
+    // up perfectly with the input coordinate system used by canvasPos().
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(offscreen, 0, 0, W, H, 0, 0, canvas.width, canvas.height);
   }
 
   function lerp(a, b, t) {
@@ -284,6 +306,10 @@
 
     // Canvas interaction — add/drag food sources
     setupCanvasInteraction();
+
+    // Edit-mode toggle — controls whether the canvas captures touch events
+    // (so mobile users can scroll the page past the canvas).
+    setupEditToggle();
   }
 
   function setupCanvasInteraction() {
@@ -291,8 +317,12 @@
     let dragTarget = null; // index into foodSources if dragging existing
 
     function canvasPos(e) {
+      // Use the live bounding rect so we always translate page pixels
+      // (clientX/Y) into the canvas's CSS-pixel coordinate space — which is
+      // also our simulation coordinate space (W×H). This is robust against
+      // page scroll, zoom, and DPR.
       const rect = canvas.getBoundingClientRect();
-      const src  = e.touches ? e.touches[0] : e;
+      const src  = (e.touches && e.touches[0]) || (e.changedTouches && e.changedTouches[0]) || e;
       return {
         x: (src.clientX - rect.left) * (W / rect.width),
         y: (src.clientY - rect.top)  * (H / rect.height),
@@ -311,7 +341,10 @@
     }
 
     function onStart(e) {
-      e.preventDefault();
+      if (!editMode) return; // Allow native behavior (scroll) when editing is off.
+      // Only preventDefault for touch when actually editing — otherwise we
+      // would block the user from scrolling past the canvas on mobile.
+      if (e.cancelable) e.preventDefault();
       isDragging = true;
       const pos = canvasPos(e);
       const near = nearestFood(pos);
@@ -329,8 +362,9 @@
     }
 
     function onMove(e) {
+      if (!editMode) return;
       if (!isDragging || dragTarget === null) return;
-      e.preventDefault();
+      if (e.cancelable) e.preventDefault();
       const pos = canvasPos(e);
       foodSources[dragTarget].x = pos.x;
       foodSources[dragTarget].y = pos.y;
@@ -344,15 +378,18 @@
     // Double-tap / double-click to remove food
     let lastTap = 0;
     canvas.addEventListener('dblclick', (e) => {
+      if (!editMode) return;
       const pos = canvasPos(e);
       const near = nearestFood(pos, 30);
       if (near >= 0) foodSources.splice(near, 1);
     });
 
     canvas.addEventListener('touchstart', (e) => {
+      if (!editMode) return;            // Let the touch initiate a page scroll.
       const now = Date.now();
       if (now - lastTap < 300) {
         // Double-tap: remove
+        if (e.cancelable) e.preventDefault();
         const pos = canvasPos(e);
         const near = nearestFood(pos, 30);
         if (near >= 0) { foodSources.splice(near, 1); return; }
@@ -367,6 +404,35 @@
     canvas.addEventListener('mousemove',  onMove);
     canvas.addEventListener('mouseup',    onEnd);
     canvas.addEventListener('mouseleave', onEnd);
+  }
+
+  // ─── Edit-mode toggle ─────────────────────────────────────────────────────
+  function setupEditToggle() {
+    const btn      = document.getElementById('edit-toggle');
+    const label    = document.getElementById('edit-toggle-label');
+    const wrapper  = document.getElementById('canvas-wrapper');
+    const badge    = document.getElementById('edit-badge');
+
+    // Default to OFF on touch-primary devices so users can scroll the page
+    // naturally on first load. Desktop users keep the immediate-interaction
+    // experience.
+    const isTouchPrimary = window.matchMedia &&
+      window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+    setEditMode(!isTouchPrimary);
+
+    btn.addEventListener('click', () => setEditMode(!editMode));
+
+    function setEditMode(on) {
+      editMode = !!on;
+      btn.setAttribute('aria-pressed', editMode ? 'true' : 'false');
+      label.textContent = editMode ? 'Edit mode: ON' : 'Edit mode: OFF';
+      wrapper.classList.toggle('edit-on', editMode);
+      if (badge) {
+        badge.textContent = editMode
+          ? 'EDIT MODE: ON · tap to place food'
+          : 'EDIT MODE: OFF · scroll freely';
+      }
+    }
   }
 
   // ─── Save organism ─────────────────────────────────────────────────────────
